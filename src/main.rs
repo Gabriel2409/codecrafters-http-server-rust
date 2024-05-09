@@ -28,22 +28,24 @@ fn main() -> Result<()> {
                     },
                     x if x.starts_with("/echo/") => {
                         let echo = &x[6..];
-                        let headers = vec![
-                            HttpHeader {
-                                key: "Content-Type".to_string(),
-                                value: "text/plain".to_string(),
+                        HttpResponse::plain_text_response(echo)
+                    }
+                    "/user-agent" => {
+                        let mut user_agent = None;
+                        for header in http_request.headers {
+                            if header.key == "User-Agent" {
+                                user_agent = Some(header.value);
+                                break;
+                            }
+                        }
+                        match user_agent {
+                            None => HttpResponse {
+                                status: HttpStatus::NotFound404,
+                                version: HttpVersion::V1_1,
+                                headers: vec![],
+                                body: None,
                             },
-                            HttpHeader {
-                                key: "Content-Length".to_string(),
-                                value: echo.len().to_string(),
-                            },
-                        ];
-
-                        HttpResponse {
-                            status: HttpStatus::Ok200,
-                            version: HttpVersion::V1_1,
-                            headers,
-                            body: Some(HttpBody::Text(echo.to_string())),
+                            Some(user_agent) => HttpResponse::plain_text_response(&user_agent),
                         }
                     }
                     _ => HttpResponse {

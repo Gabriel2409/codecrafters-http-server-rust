@@ -92,6 +92,28 @@ impl From<HttpResponse> for String {
     }
 }
 
+impl HttpResponse {
+    pub fn plain_text_response(content: &str) -> Self {
+        let headers = vec![
+            HttpHeader {
+                key: "Content-Type".to_string(),
+                value: "text/plain".to_string(),
+            },
+            HttpHeader {
+                key: "Content-Length".to_string(),
+                value: content.len().to_string(),
+            },
+        ];
+
+        HttpResponse {
+            status: HttpStatus::Ok200,
+            version: HttpVersion::V1_1,
+            headers,
+            body: Some(HttpBody::Text(content.to_string())),
+        }
+    }
+}
+
 #[derive(EnumString, AsRefStr, Debug)]
 pub enum HttpMethod {
     #[strum(serialize = "GET", ascii_case_insensitive)]

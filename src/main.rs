@@ -20,12 +20,7 @@ fn main() -> Result<()> {
                 let http_request = HttpRequest::try_from(&mut reader)?;
 
                 let http_response = match http_request.path.as_ref() {
-                    "/" => HttpResponse {
-                        status: HttpStatus::Ok200,
-                        version: HttpVersion::V1_1,
-                        headers: vec![],
-                        body: None,
-                    },
+                    "/" => HttpResponse::empty_response(),
                     x if x.starts_with("/echo/") => {
                         let echo = &x[6..];
                         HttpResponse::plain_text_response(echo)
@@ -39,21 +34,11 @@ fn main() -> Result<()> {
                             }
                         }
                         match user_agent {
-                            None => HttpResponse {
-                                status: HttpStatus::NotFound404,
-                                version: HttpVersion::V1_1,
-                                headers: vec![],
-                                body: None,
-                            },
+                            None => HttpResponse::not_found_response(),
                             Some(user_agent) => HttpResponse::plain_text_response(&user_agent),
                         }
                     }
-                    _ => HttpResponse {
-                        status: HttpStatus::NotFound404,
-                        version: HttpVersion::V1_1,
-                        headers: vec![],
-                        body: None,
-                    },
+                    _ => HttpResponse::not_found_response(),
                 };
 
                 stream = reader.into_inner();

@@ -93,6 +93,25 @@ impl From<HttpResponse> for String {
 }
 
 impl HttpResponse {
+    pub fn empty_response() -> Self {
+        HttpResponse {
+            status: HttpStatus::Ok200,
+            version: HttpVersion::V1_1,
+            headers: vec![HttpHeader {
+                key: "Content-Length".to_string(),
+                value: "0".to_string(),
+            }],
+            body: None,
+        }
+    }
+    pub fn not_found_response() -> Self {
+        HttpResponse {
+            status: HttpStatus::NotFound404,
+            version: HttpVersion::V1_1,
+            headers: vec![],
+            body: None,
+        }
+    }
     pub fn plain_text_response(content: &str) -> Self {
         let headers = vec![
             HttpHeader {

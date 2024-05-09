@@ -5,7 +5,7 @@ use std::{
     net::TcpListener,
 };
 
-use http::{HttpResponse, HttpStatus, HttpVersion};
+use http::{HttpBody, HttpHeader, HttpResponse, HttpStatus, HttpVersion};
 
 pub use crate::error::{Error, Result};
 use crate::http::HttpRequest;
@@ -26,6 +26,26 @@ fn main() -> Result<()> {
                         headers: vec![],
                         body: None,
                     },
+                    x if x.starts_with("/echo/") => {
+                        let echo = &x[6..];
+                        let headers = vec![
+                            HttpHeader {
+                                key: "Content-Type".to_string(),
+                                value: "text/plain".to_string(),
+                            },
+                            HttpHeader {
+                                key: "Content-Length".to_string(),
+                                value: echo.len().to_string(),
+                            },
+                        ];
+
+                        HttpResponse {
+                            status: HttpStatus::Ok200,
+                            version: HttpVersion::V1_1,
+                            headers,
+                            body: Some(HttpBody::Text(echo.to_string())),
+                        }
+                    }
                     _ => HttpResponse {
                         status: HttpStatus::NotFound404,
                         version: HttpVersion::V1_1,

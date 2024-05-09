@@ -82,7 +82,9 @@ impl From<HttpResponse> for String {
         val.push_str("\r\n");
         match response.body {
             None => {}
-            Some(_) => todo!(),
+            Some(body) => {
+                val.push_str(String::from(body).as_ref());
+            }
         }
         val.push_str("\r\n");
 
@@ -112,8 +114,8 @@ pub enum HttpStatus {
 
 #[derive(Debug)]
 pub struct HttpHeader {
-    key: String,
-    value: String,
+    pub key: String,
+    pub value: String,
 }
 
 impl TryFrom<String> for HttpHeader {
@@ -141,4 +143,14 @@ impl From<HttpHeader> for String {
 }
 
 #[derive(Debug)]
-pub struct HttpBody {}
+pub enum HttpBody {
+    Text(String),
+}
+
+impl From<HttpBody> for String {
+    fn from(body: HttpBody) -> Self {
+        match body {
+            HttpBody::Text(x) => x,
+        }
+    }
+}

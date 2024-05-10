@@ -1,12 +1,13 @@
 mod error;
 mod http;
+mod threadpool;
 use std::{
     io::{BufReader, Write},
     net::{TcpListener, TcpStream},
-    thread,
 };
 
 use http::HttpResponse;
+use threadpool::ThreadPool;
 
 pub use crate::error::{Error, Result};
 use crate::http::HttpRequest;
@@ -44,12 +45,13 @@ fn handle_connection(mut stream: TcpStream) -> Result<()> {
 
 fn main() -> Result<()> {
     let listener = TcpListener::bind("127.0.0.1:4221").expect("Could not bind tcp listener");
+    let pool = ThreadPool::new(4);
 
     for stream in listener.incoming() {
         match stream {
             Ok(stream) => {
                 // TODO: handle this and return 400 or 500 instead.
-                thread::spawn(|| handle_connection(stream).expect("Could not build response"));
+                pool.execute(|| handle_connection(stream).expect("Could not build response"));
             }
             Err(e) => {
                 println!("error: {}", e);

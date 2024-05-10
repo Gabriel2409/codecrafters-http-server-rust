@@ -136,6 +136,26 @@ impl HttpResponse {
             body: Some(HttpBody::Text(content.to_string())),
         }
     }
+
+    pub fn file_response(content: &str) -> Self {
+        let headers = vec![
+            HttpHeader {
+                key: "Content-Type".to_string(),
+                value: "application/octet-stream".to_string(),
+            },
+            HttpHeader {
+                key: "Content-Length".to_string(),
+                value: content.len().to_string(),
+            },
+        ];
+
+        HttpResponse {
+            status: HttpStatus::Ok200,
+            version: HttpVersion::V1_1,
+            headers,
+            body: Some(HttpBody::Text(content.to_string())),
+        }
+    }
 }
 
 #[derive(EnumString, AsRefStr, Debug)]
@@ -154,7 +174,7 @@ pub enum HttpVersion {
 pub enum HttpStatus {
     #[strum(serialize = "200 OK")]
     Ok200,
-    #[strum(serialize = "404 NOT FOUND")]
+    #[strum(serialize = "404 Not Found")]
     NotFound404,
 }
 

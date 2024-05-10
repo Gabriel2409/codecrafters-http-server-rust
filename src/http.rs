@@ -97,6 +97,8 @@ impl HttpResponse {
         HttpResponse {
             status: HttpStatus::Ok200,
             version: HttpVersion::V1_1,
+            // https://datatracker.ietf.org/doc/html/rfc7230#section-3.3
+            // good practice to add a content length header
             headers: vec![HttpHeader {
                 key: "Content-Length".to_string(),
                 value: "0".to_string(),
@@ -108,7 +110,10 @@ impl HttpResponse {
         HttpResponse {
             status: HttpStatus::NotFound404,
             version: HttpVersion::V1_1,
-            headers: vec![],
+            headers: vec![HttpHeader {
+                key: "Content-Length".to_string(),
+                value: "0".to_string(),
+            }],
             body: None,
         }
     }

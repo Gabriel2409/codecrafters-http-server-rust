@@ -14,6 +14,7 @@ use crate::http::HttpRequest;
 
 fn handle_connection(mut stream: TcpStream) -> Result<()> {
     let mut reader = BufReader::new(stream);
+    // TODO: extract error and map it to a http response
     let http_request = HttpRequest::try_from(&mut reader)?;
 
     let http_response = match http_request.path.as_ref() {
@@ -45,8 +46,10 @@ fn handle_connection(mut stream: TcpStream) -> Result<()> {
 
 fn main() -> Result<()> {
     let listener = TcpListener::bind("127.0.0.1:4221").expect("Could not bind tcp listener");
-    let pool = ThreadPool::new(4);
 
+    let pool = ThreadPool::build(4)?;
+
+    // for stream in listener.incoming().take(5) { // disconnects after 5 requests
     for stream in listener.incoming() {
         match stream {
             Ok(stream) => {

@@ -1,3 +1,4 @@
+use crate::{Error, Result};
 use std::{
     sync::{mpsc, Arc, Mutex},
     thread,
@@ -5,13 +6,18 @@ use std::{
 
 pub struct ThreadPool {
     workers: Vec<Worker>,
-    sender: mpsc::Sender<Job>,
+    sender: Option<mpsc::Sender<Job>>,
 }
 
 impl ThreadPool {
-    pub fn new(size: usize) -> Self {
+    pub fn build(size: usize) -> Result<Self> {
+        if size == 0 {
+            return Err(Error::InvalidPoolSize);
+        }
+
         let (sender, receiver) = mpsc::channel();
 
+        // Beause we have a single consumer
         let receiver = Arc::new(Mutex::new(receiver));
 
         let mut workers = Vec::with_capacity(size);
@@ -19,33 +25,69 @@ impl ThreadPool {
         for id in 0..size {
             workers.push(Worker::new(id, Arc::clone(&receiver)));
         }
-        Self { workers, sender }
+        Ok(Self {
+            workers,
+            sender: Some(sender),
+        })
     }
     pub fn execute<F>(&self, f: F)
     where
         F: FnOnce() + Send + 'static,
     {
         let job = Box::new(f);
-        // TODO: error handling
-        self.sender.send(job).expect("Could not send job");
+        self.sender
+            .as_ref()
+            .expect("No sender")
+            .send(job)
+            .expect("Could not send job");
+    }
+}
+
+impl Drop for ThreadPool {
+    fn drop(&mut self) {
+        drop(self.sender.take());
+
+        for worker in &mut self.workers {
+            // println!("Shutting down worker {}", worker.id);
+
+            if let Some(thread) = worker.thread.take() {
+                thread.join().expect("Could not join thread")
+            }
+        }
     }
 }
 
 struct Worker {
     id: usize,
-    thread: thread::JoinHandle<()>,
+    thread: Option<thread::JoinHandle<()>>,
 }
 
 impl Worker {
     fn new(id: usize, receiver: Arc<Mutex<mpsc::Receiver<Job>>>) -> Worker {
         let thread = thread::spawn(move || loop {
-            let job = receiver.lock().unwrap().recv().unwrap();
+            let message = receiver
+                .lock()
+                .expect("Worker {id} failed to acquire lock")
+                .recv();
 
-            println!("Worker {id} got a job; executing.");
+            // NOTE: the lock is released here, allowing other workers to receive jobs
 
-            job();
+            match message {
+                Ok(job) => {
+                    // println!("Worker {id} got a job; executing.");
+
+                    job();
+                }
+                Err(_) => {
+                    println!("Worker {id} disconnected; shutting down.");
+                    break;
+                }
+            }
         });
-        Worker { id, thread }
+        Worker {
+            id,
+            thread: Some(thread),
+        }
     }
 }
 

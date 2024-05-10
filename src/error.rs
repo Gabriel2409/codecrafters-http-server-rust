@@ -11,6 +11,9 @@ pub enum Error {
     #[error("Invalid http header")]
     InvalidHeader,
 
+    #[error("Invalid pool size")]
+    InvalidPoolSize,
+
     #[error(transparent)]
     IoError(#[from] std::io::Error),
 

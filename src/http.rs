@@ -145,17 +145,21 @@ impl HttpResponse {
         }
     }
 
-    pub fn add_compression(&mut self, compression: &str) {
-        match compression {
-            "gzip" => {
-                let new_header = HttpHeader {
-                    key: "Content-Encoding".to_string(),
-                    value: "gzip".to_string(),
-                };
-                self.headers.push(new_header);
-            }
+    /// compression is a list of comma separated values
+    pub fn add_compression(&mut self, accepted_encodings: &str) {
+        for accepted_encoding in accepted_encodings.split(',') {
+            match accepted_encoding.trim() {
+                "gzip" => {
+                    let new_header = HttpHeader {
+                        key: "Content-Encoding".to_string(),
+                        value: "gzip".to_string(),
+                    };
+                    self.headers.push(new_header);
+                    break;
+                }
 
-            _ => {}
+                _ => {}
+            }
         }
     }
 }

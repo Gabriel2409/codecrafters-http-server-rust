@@ -16,6 +16,7 @@ use crate::http::HttpRequest;
 
 fn handle_connection(mut stream: TcpStream, directory: &str) -> Result<()> {
     let mut reader = BufReader::new(stream);
+
     // TODO: extract error and map it to a http response
     let http_request = HttpRequest::try_from(&mut reader)?;
 
@@ -25,15 +26,22 @@ fn handle_connection(mut stream: TcpStream, directory: &str) -> Result<()> {
         header_map.insert(header.key.to_lowercase(), header.value.clone());
     }
 
-    let mut http_response = match http_request.path.as_ref() {
-        "/" => HttpResponse::empty_response(HttpStatus::Ok200),
+    let accepted_encodings = header_map
+        .get("accept-encoding")
+        .map(|s| s.to_owned())
+        .unwrap_or("None".to_owned());
+
+    let http_response = match http_request.path.as_ref() {
+        "/" => Ok(HttpResponse::empty_response(HttpStatus::Ok200)),
         x if x.starts_with("/echo/") => {
             let echo = &x[6..];
-            HttpResponse::content_response(echo, "text/plain")
+            HttpResponse::content_response(echo, "text/plain", &accepted_encodings)
         }
         "/user-agent" => match header_map.get("user-agent") {
-            None => HttpResponse::empty_response(HttpStatus::NotFound404),
-            Some(user_agent) => HttpResponse::content_response(user_agent, "text/plain"),
+            None => Ok(HttpResponse::empty_response(HttpStatus::NotFound404)),
+            Some(user_agent) => {
+                HttpResponse::content_response(user_agent, "text/plain", &accepted_encodings)
+            }
         },
         x if x.starts_with("/files/") => {
             let filename = &x[7..];
@@ -44,9 +52,13 @@ fn handle_connection(mut stream: TcpStream, directory: &str) -> Result<()> {
                 HttpMethod::Get => match filepath.exists() {
                     true => {
                         let content = std::fs::read_to_string(filepath).expect("File should exist");
-                        HttpResponse::content_response(&content, "application/octet-stream")
+                        HttpResponse::content_response(
+                            &content,
+                            "application/octet-stream",
+                            &accepted_encodings,
+                        )
                     }
-                    false => HttpResponse::empty_response(HttpStatus::NotFound404),
+                    false => Ok(HttpResponse::empty_response(HttpStatus::NotFound404)),
                 },
                 HttpMethod::Post => {
                     let dirpath = filepath.parent().expect("Directory should not be none");
@@ -58,25 +70,23 @@ fn handle_connection(mut stream: TcpStream, directory: &str) -> Result<()> {
                                 HttpBody::Text(body) => {
                                     std::fs::write(filepath, body)?;
 
-                                    HttpResponse::empty_response(HttpStatus::Created201)
+                                    Ok(HttpResponse::empty_response(HttpStatus::Created201))
                                 }
                                 _ => todo!(),
                             }
                         }
 
-                        false => HttpResponse::empty_response(HttpStatus::NotFound404),
+                        false => Ok(HttpResponse::empty_response(HttpStatus::NotFound404)),
                     }
                 }
             }
         }
 
-        _ => HttpResponse::empty_response(HttpStatus::NotFound404),
-    };
-
-    let compression = header_map.get("accept-encoding");
-    if let Some(compression) = compression {
-        http_response.add_compression(compression);
+        _ => Ok(HttpResponse::empty_response(HttpStatus::NotFound404)),
     }
+    .unwrap_or(HttpResponse::empty_response(
+        HttpStatus::InternalServerError500,
+    ));
 
     stream = reader.into_inner();
     let res: Vec<u8> = http_response.into();

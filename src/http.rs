@@ -2,7 +2,6 @@ use strum_macros::{AsRefStr, EnumString};
 
 use crate::{Error, Result};
 use std::{
-    collections::HashMap,
     io::{BufRead, BufReader, Read, Write},
     net::TcpStream,
     str::FromStr,
@@ -128,61 +127,53 @@ impl HttpResponse {
             body: None,
         }
     }
-    pub fn content_response(content: &str, content_type: &str) -> Self {
-        let headers = vec![
+
+    /// accepted_encodings is a list of comma separated values
+    pub fn content_response(
+        content: &str,
+        content_type: &str,
+        accepted_encodings: &str,
+    ) -> Result<Self> {
+        let mut compression = String::from("None");
+        for accepted_encoding in accepted_encodings.split(',') {
+            if accepted_encoding.trim() == "gzip" {
+                compression = String::from("gzip");
+                break;
+            }
+        }
+
+        let http_body = match compression.as_ref() {
+            "gzip" => HttpBody::gzip_from_content(content)?,
+            _ => HttpBody::from_content(content),
+        };
+
+        let mut headers = vec![
             HttpHeader {
                 key: "Content-Type".to_string(),
                 value: content_type.to_string(),
             },
             HttpHeader {
                 key: "Content-Length".to_string(),
-                value: content.len().to_string(),
+                value: http_body.content_length().to_string(),
             },
         ];
 
-        HttpResponse {
+        match compression.as_ref() {
+            "gzip" => {
+                headers.push(HttpHeader {
+                    key: "Content-Encoding".to_string(),
+                    value: "gzip".to_string(),
+                });
+            }
+            _ => {}
+        };
+
+        Ok(HttpResponse {
             status: HttpStatus::Ok200,
             version: HttpVersion::V1_1,
             headers,
-            body: Some(HttpBody::Text(content.to_string())),
-        }
-    }
-
-    /// compression is a list of comma separated values
-    pub fn add_compression(&mut self, accepted_encodings: &str) {
-        for accepted_encoding in accepted_encodings.split(',') {
-            match accepted_encoding.trim() {
-                "gzip" => {
-                    self.body = self.body.take().map(|body| body.gzip_compress());
-
-                    let body_bytes: Option<Vec<u8>> = self.body.clone().map(|body| body.into());
-                    let content_length = body_bytes.unwrap_or(vec![]).len();
-
-                    let mut headers = Vec::new();
-                    for header in self.headers.clone() {
-                        if header.key.to_lowercase() != "content-length" {
-                            headers.push(header)
-                        }
-                    }
-
-                    headers.push(HttpHeader {
-                        key: "Content-Encoding".to_string(),
-                        value: "gzip".to_string(),
-                    });
-
-                    headers.push(HttpHeader {
-                        key: "Content-Length".to_string(),
-                        value: format!("{content_length}"),
-                    });
-
-                    self.headers = headers;
-
-                    break;
-                }
-
-                _ => {}
-            }
-        }
+            body: Some(http_body),
+        })
     }
 }
 
@@ -208,6 +199,8 @@ pub enum HttpStatus {
     NotFound404,
     #[strum(serialize = "201 Created")]
     Created201,
+    #[strum(serialize = "500 Internal Server Error")]
+    InternalServerError500,
 }
 
 #[derive(Debug, Clone)]
@@ -256,11 +249,21 @@ impl From<HttpBody> for Vec<u8> {
 }
 
 impl HttpBody {
-    pub fn gzip_compress(self) -> Self {
-        let body_bytes: Vec<u8> = self.into();
+    pub fn content_length(&self) -> usize {
+        match self {
+            Self::Text(x) => x.as_bytes().len(),
+            Self::Gzip(x) => x.len(),
+        }
+    }
+    pub fn from_content(content: &str) -> Self {
+        Self::Text(content.to_string())
+    }
+
+    pub fn gzip_from_content(content: &str) -> Result<Self> {
+        let body_bytes = content.as_bytes();
         let mut e = flate2::write::GzEncoder::new(Vec::new(), flate2::Compression::default());
-        e.write_all(&body_bytes).unwrap();
-        let encoded_bytes = e.finish().unwrap();
-        Self::Gzip(encoded_bytes)
+        e.write_all(body_bytes).unwrap();
+        let encoded_bytes = e.finish()?;
+        Ok(Self::Gzip(encoded_bytes))
     }
 }

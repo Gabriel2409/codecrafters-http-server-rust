@@ -2,6 +2,7 @@ mod error;
 mod http;
 mod threadpool;
 use std::{
+    collections::HashMap,
     io::{BufReader, Write},
     net::{TcpListener, TcpStream},
     path::PathBuf,
@@ -17,27 +18,23 @@ fn handle_connection(mut stream: TcpStream, directory: &str) -> Result<()> {
     let mut reader = BufReader::new(stream);
     // TODO: extract error and map it to a http response
     let http_request = HttpRequest::try_from(&mut reader)?;
-    dbg!(&http_request);
 
-    let http_response = match http_request.path.as_ref() {
-        "/" => HttpResponse::empty_response(),
+    let mut header_map = HashMap::new();
+
+    for header in http_request.headers.iter() {
+        header_map.insert(header.key.to_lowercase(), header.value.clone());
+    }
+
+    let mut http_response = match http_request.path.as_ref() {
+        "/" => HttpResponse::empty_response(HttpStatus::Ok200),
         x if x.starts_with("/echo/") => {
             let echo = &x[6..];
-            HttpResponse::plain_text_response(echo)
+            HttpResponse::content_response(echo, "text/plain")
         }
-        "/user-agent" => {
-            let mut user_agent = None;
-            for header in http_request.headers {
-                if header.key == "User-Agent" {
-                    user_agent = Some(header.value);
-                    break;
-                }
-            }
-            match user_agent {
-                None => HttpResponse::not_found_response(),
-                Some(user_agent) => HttpResponse::plain_text_response(&user_agent),
-            }
-        }
+        "/user-agent" => match header_map.get("user-agent") {
+            None => HttpResponse::empty_response(HttpStatus::NotFound404),
+            Some(user_agent) => HttpResponse::content_response(user_agent, "text/plain"),
+        },
         x if x.starts_with("/files/") => {
             let filename = &x[7..];
 
@@ -47,9 +44,9 @@ fn handle_connection(mut stream: TcpStream, directory: &str) -> Result<()> {
                 HttpMethod::Get => match filepath.exists() {
                     true => {
                         let content = std::fs::read_to_string(filepath).expect("File should exist");
-                        HttpResponse::file_response(&content)
+                        HttpResponse::content_response(&content, "application/octet-stream")
                     }
-                    false => HttpResponse::not_found_response(),
+                    false => HttpResponse::empty_response(HttpStatus::NotFound404),
                 },
                 HttpMethod::Post => {
                     let dirpath = filepath.parent().expect("Directory should not be none");
@@ -61,21 +58,24 @@ fn handle_connection(mut stream: TcpStream, directory: &str) -> Result<()> {
                                 HttpBody::Text(body) => {
                                     std::fs::write(filepath, body)?;
 
-                                    let mut res = HttpResponse::empty_response();
-                                    res.status = HttpStatus::Created201;
-                                    res
+                                    HttpResponse::empty_response(HttpStatus::Created201)
                                 }
                             }
                         }
 
-                        false => HttpResponse::not_found_response(),
+                        false => HttpResponse::empty_response(HttpStatus::NotFound404),
                     }
                 }
             }
         }
 
-        _ => HttpResponse::not_found_response(),
+        _ => HttpResponse::empty_response(HttpStatus::NotFound404),
     };
+
+    let compression = header_map.get("accept-encoding");
+    if let Some(compression) = compression {
+        http_response.add_compression(compression);
+    }
 
     stream = reader.into_inner();
     stream.write_all(String::from(http_response).as_bytes())?;

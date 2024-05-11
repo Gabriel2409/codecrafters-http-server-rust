@@ -50,7 +50,7 @@ impl TryFrom<&mut BufReader<TcpStream>> for HttpRequest {
 
             let header = HttpHeader::try_from(s)?;
 
-            if header.key == "Content-Length" {
+            if header.key.to_lowercase() == "content-length" {
                 content_length = header.value.parse::<_>()?;
             }
 
@@ -112,9 +112,9 @@ impl From<HttpResponse> for String {
 }
 
 impl HttpResponse {
-    pub fn empty_response() -> Self {
+    pub fn empty_response(status: HttpStatus) -> Self {
         HttpResponse {
-            status: HttpStatus::Ok200,
+            status: status,
             version: HttpVersion::V1_1,
             // https://datatracker.ietf.org/doc/html/rfc7230#section-3.3
             // good practice to add a content length header
@@ -125,22 +125,11 @@ impl HttpResponse {
             body: None,
         }
     }
-    pub fn not_found_response() -> Self {
-        HttpResponse {
-            status: HttpStatus::NotFound404,
-            version: HttpVersion::V1_1,
-            headers: vec![HttpHeader {
-                key: "Content-Length".to_string(),
-                value: "0".to_string(),
-            }],
-            body: None,
-        }
-    }
-    pub fn plain_text_response(content: &str) -> Self {
+    pub fn content_response(content: &str, content_type: &str) -> Self {
         let headers = vec![
             HttpHeader {
                 key: "Content-Type".to_string(),
-                value: "text/plain".to_string(),
+                value: content_type.to_string(),
             },
             HttpHeader {
                 key: "Content-Length".to_string(),
@@ -156,23 +145,17 @@ impl HttpResponse {
         }
     }
 
-    pub fn file_response(content: &str) -> Self {
-        let headers = vec![
-            HttpHeader {
-                key: "Content-Type".to_string(),
-                value: "application/octet-stream".to_string(),
-            },
-            HttpHeader {
-                key: "Content-Length".to_string(),
-                value: content.len().to_string(),
-            },
-        ];
+    pub fn add_compression(&mut self, compression: &str) {
+        match compression {
+            "gzip" => {
+                let new_header = HttpHeader {
+                    key: "Content-Encoding".to_string(),
+                    value: "gzip".to_string(),
+                };
+                self.headers.push(new_header);
+            }
 
-        HttpResponse {
-            status: HttpStatus::Ok200,
-            version: HttpVersion::V1_1,
-            headers,
-            body: Some(HttpBody::Text(content.to_string())),
+            _ => {}
         }
     }
 }

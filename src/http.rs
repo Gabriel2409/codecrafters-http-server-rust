@@ -2,7 +2,8 @@ use strum_macros::{AsRefStr, EnumString};
 
 use crate::{Error, Result};
 use std::{
-    io::{BufRead, BufReader, Read},
+    collections::HashMap,
+    io::{BufRead, BufReader, Read, Write},
     net::TcpStream,
     str::FromStr,
 };
@@ -87,34 +88,36 @@ pub struct HttpResponse {
     pub headers: Vec<HttpHeader>,
     pub body: Option<HttpBody>,
 }
-impl From<HttpResponse> for String {
+impl From<HttpResponse> for Vec<u8> {
     fn from(response: HttpResponse) -> Self {
-        let mut val = format!(
+        let mut res = Vec::new();
+        let val = format!(
             "{} {}\r\n",
             response.version.as_ref(),
             response.status.as_ref()
         );
+        res.extend(val.as_bytes());
 
         for header in response.headers {
-            val.push_str(String::from(header).as_ref());
+            res.extend::<Vec<u8>>(header.into());
         }
-        val.push_str("\r\n");
+        res.extend(b"\r\n");
         match response.body {
             None => {}
             Some(body) => {
-                val.push_str(String::from(body).as_ref());
+                let body_bytes: Vec<u8> = body.into();
+                res.extend(body_bytes);
             }
         }
-        val.push_str("\r\n");
 
-        val
+        res
     }
 }
 
 impl HttpResponse {
     pub fn empty_response(status: HttpStatus) -> Self {
         HttpResponse {
-            status: status,
+            status,
             version: HttpVersion::V1_1,
             // https://datatracker.ietf.org/doc/html/rfc7230#section-3.3
             // good practice to add a content length header
@@ -150,11 +153,30 @@ impl HttpResponse {
         for accepted_encoding in accepted_encodings.split(',') {
             match accepted_encoding.trim() {
                 "gzip" => {
-                    let new_header = HttpHeader {
+                    self.body = self.body.take().map(|body| body.gzip_compress());
+
+                    let body_bytes: Option<Vec<u8>> = self.body.clone().map(|body| body.into());
+                    let content_length = body_bytes.unwrap_or(vec![]).len();
+
+                    let mut headers = Vec::new();
+                    for header in self.headers.clone() {
+                        if header.key.to_lowercase() != "content-length" {
+                            headers.push(header)
+                        }
+                    }
+
+                    headers.push(HttpHeader {
                         key: "Content-Encoding".to_string(),
                         value: "gzip".to_string(),
-                    };
-                    self.headers.push(new_header);
+                    });
+
+                    headers.push(HttpHeader {
+                        key: "Content-Length".to_string(),
+                        value: format!("{content_length}"),
+                    });
+
+                    self.headers = headers;
+
                     break;
                 }
 
@@ -188,7 +210,7 @@ pub enum HttpStatus {
     Created201,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct HttpHeader {
     pub key: String,
     pub value: String,
@@ -212,21 +234,33 @@ impl TryFrom<String> for HttpHeader {
     }
 }
 
-impl From<HttpHeader> for String {
+impl From<HttpHeader> for Vec<u8> {
     fn from(header: HttpHeader) -> Self {
-        format!("{}: {}\r\n", header.key, header.value)
+        Vec::from(format!("{}: {}\r\n", header.key, header.value).as_bytes())
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum HttpBody {
     Text(String),
+    Gzip(Vec<u8>),
 }
 
-impl From<HttpBody> for String {
+impl From<HttpBody> for Vec<u8> {
     fn from(body: HttpBody) -> Self {
         match body {
-            HttpBody::Text(x) => x,
+            HttpBody::Text(x) => Vec::from(x.as_bytes()),
+            HttpBody::Gzip(x) => x,
         }
+    }
+}
+
+impl HttpBody {
+    pub fn gzip_compress(self) -> Self {
+        let body_bytes: Vec<u8> = self.into();
+        let mut e = flate2::write::GzEncoder::new(Vec::new(), flate2::Compression::default());
+        e.write_all(&body_bytes).unwrap();
+        let encoded_bytes = e.finish().unwrap();
+        Self::Gzip(encoded_bytes)
     }
 }

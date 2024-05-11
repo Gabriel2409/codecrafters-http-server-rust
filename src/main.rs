@@ -60,6 +60,7 @@ fn handle_connection(mut stream: TcpStream, directory: &str) -> Result<()> {
 
                                     HttpResponse::empty_response(HttpStatus::Created201)
                                 }
+                                _ => todo!(),
                             }
                         }
 
@@ -78,7 +79,8 @@ fn handle_connection(mut stream: TcpStream, directory: &str) -> Result<()> {
     }
 
     stream = reader.into_inner();
-    stream.write_all(String::from(http_response).as_bytes())?;
+    let res: Vec<u8> = http_response.into();
+    stream.write_all(&res)?;
     Ok(())
 }
 

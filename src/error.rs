@@ -14,6 +14,9 @@ pub enum Error {
     #[error("Invalid pool size")]
     InvalidPoolSize,
 
+    #[error("Can not compress")]
+    CanNotCompress,
+
     #[error(transparent)]
     IoError(#[from] std::io::Error),
 

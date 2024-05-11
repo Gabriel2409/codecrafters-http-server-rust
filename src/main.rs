@@ -4,10 +4,10 @@ mod threadpool;
 use std::{
     io::{BufReader, Write},
     net::{TcpListener, TcpStream},
-    path::{Path, PathBuf},
+    path::PathBuf,
 };
 
-use http::{HttpMethod, HttpResponse};
+use http::{HttpBody, HttpMethod, HttpResponse, HttpStatus};
 use threadpool::ThreadPool;
 
 pub use crate::error::{Error, Result};
@@ -17,6 +17,7 @@ fn handle_connection(mut stream: TcpStream, directory: &str) -> Result<()> {
     let mut reader = BufReader::new(stream);
     // TODO: extract error and map it to a http response
     let http_request = HttpRequest::try_from(&mut reader)?;
+    dbg!(&http_request);
 
     let http_response = match http_request.path.as_ref() {
         "/" => HttpResponse::empty_response(),
@@ -50,6 +51,26 @@ fn handle_connection(mut stream: TcpStream, directory: &str) -> Result<()> {
                     }
                     false => HttpResponse::not_found_response(),
                 },
+                HttpMethod::Post => {
+                    let dirpath = filepath.parent().expect("Directory should not be none");
+                    match dirpath.exists() {
+                        true => {
+                            let body = http_request.body.expect("POST request should have a body");
+
+                            match body {
+                                HttpBody::Text(body) => {
+                                    std::fs::write(filepath, body)?;
+
+                                    let mut res = HttpResponse::empty_response();
+                                    res.status = HttpStatus::Created201;
+                                    res
+                                }
+                            }
+                        }
+
+                        false => HttpResponse::not_found_response(),
+                    }
+                }
             }
         }
 

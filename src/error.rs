@@ -19,5 +19,11 @@ pub enum Error {
 
     #[error(transparent)]
     StrumParseError(#[from] strum::ParseError),
+
+    #[error(transparent)]
+    ParseIntError(#[from] std::num::ParseIntError),
+
+    #[error(transparent)]
+    FromUtf8Error(#[from] std::string::FromUtf8Error),
 }
 pub type Result<T> = core::result::Result<T, Error>;

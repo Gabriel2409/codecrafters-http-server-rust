@@ -2,7 +2,7 @@ use strum_macros::{AsRefStr, EnumString};
 
 use crate::{Error, Result};
 use std::{
-    io::{BufRead, BufReader},
+    io::{BufRead, BufReader, Read},
     net::TcpStream,
     str::FromStr,
 };
@@ -39,6 +39,8 @@ impl TryFrom<&mut BufReader<TcpStream>> for HttpRequest {
         let version = HttpVersion::from_str(parts[2])?;
 
         let mut headers = Vec::new();
+        let mut content_length: usize = 0;
+
         loop {
             let mut s = String::new();
             reader.read_line(&mut s)?;
@@ -48,15 +50,32 @@ impl TryFrom<&mut BufReader<TcpStream>> for HttpRequest {
 
             let header = HttpHeader::try_from(s)?;
 
+            if header.key == "Content-Length" {
+                content_length = header.value.parse::<_>()?;
+            }
+
             headers.push(header);
         }
+
+        let http_body = {
+            match content_length {
+                0 => None,
+                x => {
+                    let mut body = vec![0; x];
+                    reader.read_exact(&mut body)?;
+                    let body = String::from_utf8(body)?;
+
+                    Some(HttpBody::Text(body))
+                }
+            }
+        };
 
         Ok(HttpRequest {
             method,
             path,
             version,
             headers,
-            body: None,
+            body: http_body,
         })
     }
 }
@@ -162,6 +181,8 @@ impl HttpResponse {
 pub enum HttpMethod {
     #[strum(serialize = "GET", ascii_case_insensitive)]
     Get,
+    #[strum(serialize = "POST", ascii_case_insensitive)]
+    Post,
 }
 
 #[derive(EnumString, AsRefStr, Debug)]
@@ -176,6 +197,8 @@ pub enum HttpStatus {
     Ok200,
     #[strum(serialize = "404 Not Found")]
     NotFound404,
+    #[strum(serialize = "201 Created")]
+    Created201,
 }
 
 #[derive(Debug)]

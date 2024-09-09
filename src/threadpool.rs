@@ -65,12 +65,15 @@ struct Worker {
 impl Worker {
     fn new(id: usize, receiver: Arc<Mutex<mpsc::Receiver<Job>>>) -> Worker {
         let thread = thread::spawn(move || loop {
+            // NOTE: here the thread is locked until I receive a message
+            // If i have 4 threads, all 4 threads will be in waiting
             let message = receiver
                 .lock()
                 .expect("Worker {id} failed to acquire lock")
                 .recv();
 
             // NOTE: the lock is released here, allowing other workers to receive jobs
+            // NOTE: because we use mpsc, only one receiver will actually process the job
 
             match message {
                 Ok(job) => {

@@ -95,6 +95,7 @@ fn handle_connection(mut stream: TcpStream, directory: &str) -> Result<()> {
 }
 
 fn main() -> Result<()> {
+    // NOTE: bind actually behaves bind and listen from the socket api
     let listener = TcpListener::bind("127.0.0.1:4221").expect("Could not bind tcp listener");
 
     let pool = ThreadPool::build(4)?;
@@ -105,6 +106,8 @@ fn main() -> Result<()> {
     if args.len() == 3 && args[1] == "--directory" {
         directory = args[2].to_string();
     }
+    //NOTE:similar to accept from the socket api
+
     // for stream in listener.incoming().take(5) { // disconnects after 5 requests
     for stream in listener.incoming() {
         match stream {
